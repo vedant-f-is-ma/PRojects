@@ -41,6 +41,7 @@ st.markdown('<div class="big-font">🎶 Welcome to VibeSpace 🎶</div>', unsafe
 st.markdown('<div class="subtle">Curated for those who code, create, and chill ✨</div>', unsafe_allow_html=True)
 
 st.markdown("## 🔮 Choose Your Vibe")
+>>>>>>> 12600a46c284d707413a67a2e8881efcd9d5f361
 
 # --- Sidebar Inputs ---
 vibe = st.sidebar.selectbox("🎧 Pick your vibe:", ["Chill", "Productive", "Party", "Zen"])
