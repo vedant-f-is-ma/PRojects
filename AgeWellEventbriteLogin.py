@@ -46,11 +46,11 @@ SITE_COORDINATOR_BUS_CONFIRMATION = True  # Set to True to select "Yes" for site
 SITE_COORDINATOR_PHONE = "##########"  # Set to the site coordinator's phone number (10 digits)
 
 # Wait Times (in seconds)
-PAGE_LOAD_WAIT = 5
-IFRAME_WAIT = 5
-FORM_FILL_WAIT = 3
-FINAL_WAIT = 5
-FIELD_FILL_RATE_LIMIT = 1  # Reduced from 5 to 1 second
+PAGE_LOAD_WAIT = 0.5 #55351
+IFRAME_WAIT = 0.5
+FORM_FILL_WAIT = 0.5
+FINAL_WAIT = 0.5
+FIELD_FILL_RATE_LIMIT = 0.2  # Reduced from 5 to 1 second
 
 # ============================================================================
 
