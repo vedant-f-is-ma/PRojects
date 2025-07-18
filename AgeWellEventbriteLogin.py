@@ -47,9 +47,9 @@ SITE_COORDINATOR_PHONE = "##########"  # Set to the site coordinator's phone num
 
 # Wait Times (in seconds)
 PAGE_LOAD_WAIT = 0.5 #55351
-IFRAME_WAIT = 0.5
+IFRAME_WAIT = 1
 FORM_FILL_WAIT = 0.5
-FINAL_WAIT = 0.5
+FINAL_WAIT = 5
 FIELD_FILL_RATE_LIMIT = 0.2  # Reduced from 5 to 1 second
 
 # ============================================================================
@@ -564,6 +564,15 @@ def fill_registration_form(driver, form_data):
         time.sleep(2)
         
         update_checkbox_selectors = [
+            # Eventbrite specific checkbox selectors based on the HTML structure
+            "//div[@data-testid='eds-checkbox_wrapper']//input[@type='checkbox']",
+            "//div[contains(@class, 'eds-checkbox')]//input[@type='checkbox']",
+            "//input[@type='checkbox' and ancestor::div[contains(@class, 'eds-checkbox')]]",
+            "//input[@type='checkbox' and ancestor::div[@data-testid='eds-checkbox_wrapper']]",
+            # Try clicking the wrapper div itself
+            "//div[@data-testid='eds-checkbox_wrapper']",
+            "//div[contains(@class, 'eds-checkbox')]",
+            # Original selectors as fallback
             "//input[@id='organizer-marketing-opt-in']",
             "//input[@name='organizationMarketingOptIn']",
             "//input[@type='checkbox' and contains(@class, 'eds-checkbox_input')]",
@@ -618,12 +627,22 @@ def fill_registration_form(driver, form_data):
                 for element in elements:
                     if element.is_displayed():
                         print(f"    Element displayed: {element.get_attribute('name')} | {element.get_attribute('id')} | {element.get_attribute('aria-label')}")
-                        print(f"    Checkbox checked: {element.is_selected()}")
-                        # Click the checkbox to toggle it to unchecked state
-                        element.click()
-                        print("  Clicked 'Keep me updated' checkbox to uncheck it.")
-                        unchecked = True
-                        break
+                        
+                        # Check if this is a checkbox input or a wrapper div
+                        if element.tag_name == 'input':
+                            print(f"    Checkbox checked: {element.is_selected()}")
+                            # Click the checkbox to toggle it to unchecked state
+                            element.click()
+                            print("  Clicked 'Keep me updated' checkbox to uncheck it.")
+                            unchecked = True
+                            break
+                        elif element.tag_name == 'div':
+                            print(f"    Found checkbox wrapper div, attempting to click...")
+                            # Try clicking the wrapper div
+                            element.click()
+                            print("  Clicked 'Keep me updated' checkbox wrapper to uncheck it.")
+                            unchecked = True
+                            break
                 if unchecked:
                     break
             except Exception as e:
