@@ -11,7 +11,7 @@ class ChatApp:
         self.root.configure(bg="#f0f0f0")
 
         # Configure OpenAI API
-        self.api_key = "your_api_key_here"  # You'll need to add your API key here
+        self.api_key = ""  # You'll need to add your API key here
         openai.api_key = self.api_key
 
         # Create main frame

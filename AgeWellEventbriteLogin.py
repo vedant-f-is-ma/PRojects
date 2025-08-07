@@ -29,7 +29,7 @@ COUNTRY = "United States"
 SITE_LOCATION = "City of Fremont, Age Well Center At South Fremont"
 SITE_COORDINATOR_NAME = "Martha Torrez"
 SITE_COORDINATOR_EMAIL = "mtorrez@fremont.gov"
-SITE_COORDINATOR_PHONE = "##########"
+SITE_COORDINATOR_PHONE = ""
 
 # Checkbox Confirmations (set to True to check, False to leave unchecked)
 CHECK_AGE_CONFIRMATION = True          # 55+ age confirmation
@@ -57,7 +57,7 @@ def setup_gemini():
     """Setup Gemini 1.5 Flash API"""
     try:
         # Put your API key here
-        API_KEY = "AIzaSyA8XZOuC1iGZZNe6ZK4SXvJE918yEiTIQQ"
+        API_KEY = ""
         
         # Configure Gemini API
         genai.configure(api_key=API_KEY)
