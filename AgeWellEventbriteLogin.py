@@ -8,9 +8,7 @@ import time
 import base64
 import os
 import re
-from google.cloud import vision
-from google.cloud.vision_v1 import ImageAnnotatorClient
-from google.cloud.vision_v1 import types
+import google.generativeai as genai
 import io
 
 # ============================================================================
@@ -22,13 +20,16 @@ EVENTBRITE_URL = 'https://www.eventbrite.com/e/22nd-annual-healthy-living-festiv
 PROMO_CODE = "HLFBUS25"
 
 # Image Configuration
-IMAGE_PATH = "/Users/vedant/Downloads/IMG_2162.jpeg"
+IMAGE_PATH = "/Users/vedant/Downloads/IMG_2166.jpeg"
 
 # Form Data Configuration
+COUNTRY = "United States"
+
+# Site Coordinator Information (for HLF bus confirmation)
 SITE_LOCATION = "City of Fremont, Age Well Center At South Fremont"
 SITE_COORDINATOR_NAME = "Martha Torrez"
 SITE_COORDINATOR_EMAIL = "mtorrez@fremont.gov"
-COUNTRY = "United States"
+SITE_COORDINATOR_PHONE = "##########"
 
 # Checkbox Confirmations (set to True to check, False to leave unchecked)
 CHECK_AGE_CONFIRMATION = True          # 55+ age confirmation
@@ -42,9 +43,6 @@ HLF_BUS_OPTION = True                  # Set to True to select HLF bus option, F
 # Site Coordinator Bus Confirmation
 SITE_COORDINATOR_BUS_CONFIRMATION = True  # Set to True to select "Yes" for site coordinator bus confirmation, False to skip
 
-# Site Coordinator Phone Number
-SITE_COORDINATOR_PHONE = "##########"  # Set to the site coordinator's phone number (10 digits)
-
 # Wait Times (in seconds)
 PAGE_LOAD_WAIT = 0.5 #55351
 IFRAME_WAIT = 1
@@ -54,44 +52,57 @@ FIELD_FILL_RATE_LIMIT = 0.2  # Reduced from 5 to 1 second
 
 # ============================================================================
 
-# Google Cloud Vision API setup
-def setup_vision_client():
-    """Setup Google Cloud Vision API client"""
+# Gemini API setup
+def setup_gemini():
+    """Setup Gemini 1.5 Flash API"""
     try:
-        # Use the specific credentials file
-        credentials_path = ""
+        # Put your API key here
+        API_KEY = "AIzaSyA8XZOuC1iGZZNe6ZK4SXvJE918yEiTIQQ"
         
-        # Set the environment variable for the credentials
-        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
+        # Configure Gemini API
+        genai.configure(api_key=API_KEY)
         
-        # Create the client
-        client = vision.ImageAnnotatorClient()
-        print("Google Cloud Vision API client setup successful!")
-        return client
+        # Use Gemini 1.5 Flash model
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        print("Gemini 1.5 Flash API client setup successful!")
+        return model
     except Exception as e:
-        print(f"Error setting up Vision API client: {e}")
+        print(f"Error setting up Gemini API client: {e}")
         return None
 
 def extract_text_from_image(image_path):
-    """Extract text from an image file using Google Cloud Vision API"""
-    client = setup_vision_client()
-    if not client:
+    """Extract text from an image file using Gemini 1.5 Flash API"""
+    model = setup_gemini()
+    if not model:
         return None
     
     try:
         # Read the image file
         with open(image_path, 'rb') as image_file:
-            content = image_file.read()
+            image_data = image_file.read()
         
-        # Create image object
-        image = types.Image(content=content)
+        # Process image with comprehensive prompt
+        prompt = """
+        Extract all form fields from this image and return in this exact format:
+        First Name: [value]
+        Last Name: [value] 
+        Email: [value]
+        Address: [value]
+        City: [value]
+        State: [value]
+        ZIP Code: [value]
+        Age Confirmation: [Yes/No]
+        Location Confirmation: [Yes/No]
+        Lunch Preference: [Vegetarian/Meat]
+        Liability Agreement: [Yes/No]
         
-        # Perform text detection
-        response = client.text_detection(image=image)
-        texts = response.text_annotations
+        If any field is not found, use 'None' as the value. For the lunch preference, if the check is on the top it is vegetarian and if on bottom is meat.
+        """
         
-        if texts:
-            return texts[0].description
+        response = model.generate_content([prompt, {"mime_type": "image/jpeg", "data": image_data}])
+        
+        if response and response.text:
+            return response.text.strip()
         else:
             return None
             
@@ -100,24 +111,37 @@ def extract_text_from_image(image_path):
         return None
 
 def extract_text_from_base64_image(base64_image):
-    """Extract text from a base64 encoded image using Google Cloud Vision API"""
-    client = setup_vision_client()
-    if not client:
+    """Extract text from a base64 encoded image using Gemini 1.5 Flash API"""
+    model = setup_gemini()
+    if not model:
         return None
     
     try:
         # Decode base64 image
         image_content = base64.b64decode(base64_image)
         
-        # Create image object
-        image = types.Image(content=image_content)
+        # Process image with comprehensive prompt
+        prompt = """
+        Extract all form fields from this image and return in this exact format:
+        First Name: [value]
+        Last Name: [value] 
+        Email: [value]
+        Address: [value]
+        City: [value]
+        State: [value]
+        ZIP Code: [value]
+        Age Confirmation: [Yes/No]
+        Location Confirmation: [Yes/No]
+        Lunch Preference: [Vegetarian/Meat]
+        Liability Agreement: [Yes/No]
         
-        # Perform text detection
-        response = client.text_detection(image=image)
-        texts = response.text_annotations
+        If any field is not found, use 'None' as the value.
+        """
         
-        if texts:
-            return texts[0].description
+        response = model.generate_content([prompt, {"mime_type": "image/jpeg", "data": image_content}])
+        
+        if response and response.text:
+            return response.text.strip()
         else:
             return None
             
@@ -142,153 +166,68 @@ def read_image_info(image_path):
     print(f"File size: {file_size} bytes")
     print(f"File type: JPEG image")
     
-    # Extract text from the actual image using Google Cloud Vision API
+    # Extract text from the actual image using Gemini API
     extracted_text = extract_text_from_image(image_path)
     
     if extracted_text:
-        print("Successfully extracted text from image using Google Cloud Vision API")
+        print("Successfully extracted text from image using Gemini API")
         return extracted_text
     else:
-        print("Failed to extract text from image. Using fallback data.")
-        # Fallback to simulated text if OCR fails
-        simulated_text = """
-        Healthy Living Festival Registration Form
-        
-        Please submit form to the Age Well Center at South Fremont to be registered. Answer all the questions.
-        
-        First name: AMBRISH
-        Last name: DESAI
-        Email address: desaiambrish@gmail.com
-        Write neatly
-        
-        Home address:
-        Address: 864, Beaver Ct
-        City: Fremont
-        State: CA
-        ZIP Code: 94539
-        
-        I confirm I am an older adult age 55+ (required)
-        Yes ✓ No
-        
-        I live in Alameda County.*(required)
-        Yes ✓ No
-        
-        Vegetarian or Meat option lunch?
-        Vegetarian Lunch ✓ Meat Option Lunch
-        
-        Release of Liability and Assumption of Risk Agreement
-        I HAVE FULLY READ THIS RELEASE OF LIABILITY AND ASSUMPTION OF RISK AGREEMENT AND I UNDERSTAND ITS TERMS. I UNDERSTAND THAT I HAVE GIVEN UP SUBSTANTIAL RIGHTS BY SIGNING IT, AND I SIGN IT FREELY AND VOLUNTARILY WITHOUT ANY INDUCEMENT.
-        
-        Yes, I agree X (place in X)
-        """
-        return simulated_text
+        print("Failed to extract text from image.")
+        return None
 
 def extract_form_fields(text):
-    """Extract form fields from text with confidence scores"""
+    """Extract form fields from Gemini API response"""
     extracted_data = {}
     confidence_scores = {}
     
-    # Define patterns to look for with confidence levels
-    patterns = {
-        'first_name': {
-            'pattern': r'first\s*name[:\s]*([A-Za-z]+)',
-            'confidence': 0.95
-        },
-        'last_name': {
-            'pattern': r'last\s*name[:\s]*([A-Za-z]+)',
-            'confidence': 0.95
-        },
-        'city': {
-            'pattern': r'city[:\s]*([A-Za-z]+)',
-            'confidence': 0.90
-        },
-        'state': {
-            'pattern': r'state[:\s]*([A-Z]{2})',
-            'confidence': 0.92
-        },
-        'zip_code': {
-            'pattern': r'ZIP\s*Code[:\s]*(\d{5})',
-            'confidence': 0.96
-        },
-    }
+    # Parse the structured response from Gemini
+    lines = text.strip().split('\n')
     
-    # Extract each field with confidence
-    for field_name, field_info in patterns.items():
-        match = re.search(field_info['pattern'], text, re.IGNORECASE)
-        if match:
-            extracted_data[field_name] = match.group(1).strip()
-            confidence_scores[field_name] = field_info['confidence']
-    
-    # Extract address directly from "Address:" field FIRST
-    address_match = re.search(r'Address:\s*([0-9]+,\s*[^,\n]+(?:Street|St|Avenue|Ave|Road|Rd|Court|Ct|Drive|Dr|Lane|Ln|Boulevard|Blvd))', text, re.IGNORECASE)
-    if address_match:
-        address = address_match.group(1).strip()
-        # Clean up the address
-        address = re.sub(r',\s*$', '', address)
-        address = re.sub(r'\s+', ' ', address)
-        extracted_data['address'] = address
-        confidence_scores['address'] = 0.90
-    else:
-        # Fallback: try to find address in a different format - capture everything after "Address:"
-        address_match = re.search(r'Address:\s*([^\n]+)', text, re.IGNORECASE)
-        if address_match:
-            address = address_match.group(1).strip()
-            # Clean up the address
-            address = re.sub(r',\s*$', '', address)
-            address = re.sub(r'\s+', ' ', address)
-            extracted_data['address'] = address
-            confidence_scores['address'] = 0.80
-        
-        # Fix address extraction - look for the full address pattern
-        if 'address' in extracted_data and len(extracted_data['address']) < 10:
-            # Try to find the full address including street type
-            full_address_match = re.search(r'address[:\s]*([0-9]+,\s*[^,\n]+(?:Street|St|Avenue|Ave|Road|Rd|Court|Ct|Drive|Dr|Lane|Ln|Boulevard|Blvd))', text, re.IGNORECASE)
-            if full_address_match:
-                extracted_data['address'] = full_address_match.group(1).strip()
-                confidence_scores['address'] = 0.85
-    
-    # Special handling for email - look for email address field specifically
-    email_match = re.search(r'email\s*address[:\s]*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', text, re.IGNORECASE)
-    if email_match:
-        email = email_match.group(1).strip()
-        extracted_data['email'] = email
-        confidence_scores['email'] = 0.95
-    else:
-        # Fallback: look for any email pattern
-        email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', text)
-        if email_match:
-            email = email_match.group(1).strip()
-            extracted_data['email'] = email
-            confidence_scores['email'] = 0.95
-    
-    # Add confirm_email using the same email
-    if 'email' in extracted_data:
-        extracted_data['confirm_email'] = extracted_data['email']
-        confidence_scores['confirm_email'] = 0.98
-    
-    # Clean up address and city data
-    if 'address' in extracted_data:
-        # Remove any extra text after the address
-        address = extracted_data['address']
-        if ',' in address:
-            extracted_data['address'] = address.split(',')[0].strip() + ', ' + address.split(',')[1].strip()
-    
-    if 'city' in extracted_data:
-        # Remove any extra text after the city name
-        city = extracted_data['city']
-        if ' ' in city:
-            extracted_data['city'] = city.split(' ')[0].strip()
-    
-    # Special handling for checkboxes with confidence
-    if '✓' in text or 'X' in text:
-        extracted_data['age_confirmation'] = 'Yes'
-        confidence_scores['age_confirmation'] = 0.88
-        
-        extracted_data['location_confirmation'] = 'Yes'
-        confidence_scores['location_confirmation'] = 0.88
-        
-        extracted_data['lunch_preference'] = 'Vegetarian'
-        confidence_scores['lunch_preference'] = 0.85
+    for line in lines:
+        line = line.strip()
+        if ':' in line:
+            field, value = line.split(':', 1)
+            field = field.strip().lower().replace(' ', '_')
+            value = value.strip()
+            
+            # Map field names
+            if field == 'first_name':
+                extracted_data['first_name'] = value
+                confidence_scores['first_name'] = 0.95
+            elif field == 'last_name':
+                extracted_data['last_name'] = value
+                confidence_scores['last_name'] = 0.95
+            elif field == 'email':
+                extracted_data['email'] = value
+                confidence_scores['email'] = 0.95
+                # Add confirm_email using the same email
+                extracted_data['confirm_email'] = value
+                confidence_scores['confirm_email'] = 0.98
+            elif field == 'address':
+                extracted_data['address'] = value
+                confidence_scores['address'] = 0.90
+            elif field == 'city':
+                extracted_data['city'] = value
+                confidence_scores['city'] = 0.90
+            elif field == 'state':
+                extracted_data['state'] = value
+                confidence_scores['state'] = 0.92
+            elif field == 'zip_code':
+                extracted_data['zip_code'] = value
+                confidence_scores['zip_code'] = 0.96
+            elif field == 'age_confirmation':
+                extracted_data['age_confirmation'] = value
+                confidence_scores['age_confirmation'] = 0.88
+            elif field == 'location_confirmation':
+                extracted_data['location_confirmation'] = value
+                confidence_scores['location_confirmation'] = 0.88
+            elif field == 'lunch_preference':
+                extracted_data['lunch_preference'] = value
+                confidence_scores['lunch_preference'] = 0.85
+            elif field == 'liability_agreement':
+                extracted_data['liability_agreement'] = value
+                confidence_scores['liability_agreement'] = 0.90
     
     return extracted_data, confidence_scores
 
@@ -345,6 +284,18 @@ def fill_registration_form(driver, form_data):
     try:
         # Wait for form to load
         time.sleep(3)
+        
+        # Optimized field mapping with minimal selectors
+        field_mapping = {
+            'first_name': "//input[contains(@name, 'first') or contains(@placeholder, 'First')]",
+            'last_name': "//input[contains(@name, 'last') or contains(@placeholder, 'Last')]",
+            'email': "//input[@type='email']",
+            'confirm_email': "//input[@type='email' and contains(@name, 'confirm')]",
+            'address': "//input[contains(@name, 'address') or contains(@placeholder, 'Address')]",
+            'city': "//input[contains(@name, 'city') or contains(@placeholder, 'City')]",
+            'state': "//select[contains(@name, 'state') or contains(@name, 'region')]",
+            'zip_code': "//input[contains(@name, 'postal')]",
+        }
         
         # Ordered field mapping: field name -> list of likely selectors
         field_selectors = {
@@ -473,361 +424,200 @@ def fill_registration_form(driver, form_data):
         # Step 1: Fill First Name
         print("\n=== Step 1: Filling First Name ===")
         value = form_data.get('first_name', '')
-        if value:
-            filled = False
-            for selector in field_selectors['first_name']:
-                try:
-                    element = driver.find_element(By.XPATH, selector)
-                    if element.is_displayed():
-                        element.clear()
-                        element.send_keys(value)
-                        print(f"  Filled First Name: {value}")
-                        filled = True
-                        break
-                except Exception:
-                    continue
-            if not filled:
-                print("  Could not find First Name field.")
-            else:
-                print(f"  Waiting {FIELD_FILL_RATE_LIMIT} seconds...")
-                time.sleep(FIELD_FILL_RATE_LIMIT)
+        if value and value.lower() != 'none':
+            try:
+                element = driver.find_element(By.XPATH, field_mapping['first_name'])
+                if element.is_displayed():
+                    element.clear()
+                    element.send_keys(value)
+                    print(f"  Filled First Name: {value}")
+                    time.sleep(FIELD_FILL_RATE_LIMIT)
+                else:
+                    print("  First Name field not visible.")
+            except Exception as e:
+                print(f"  Could not fill First Name: {e}")
         
         # Step 2: Fill Last Name
         print("\n=== Step 2: Filling Last Name ===")
         value = form_data.get('last_name', '')
-        if value:
-            filled = False
-            for selector in field_selectors['last_name']:
-                try:
-                    element = driver.find_element(By.XPATH, selector)
-                    if element.is_displayed():
-                        element.clear()
-                        element.send_keys(value)
-                        print(f"  Filled Last Name: {value}")
-                        filled = True
-                        break
-                except Exception:
-                    continue
-            if not filled:
-                print("  Could not find Last Name field.")
-            else:
-                print(f"  Waiting {FIELD_FILL_RATE_LIMIT} seconds...")
-                time.sleep(FIELD_FILL_RATE_LIMIT)
+        if value and value.lower() != 'none':
+            try:
+                element = driver.find_element(By.XPATH, field_mapping['last_name'])
+                if element.is_displayed():
+                    element.clear()
+                    element.send_keys(value)
+                    print(f"  Filled Last Name: {value}")
+                    time.sleep(FIELD_FILL_RATE_LIMIT)
+                else:
+                    print("  Last Name field not visible.")
+            except Exception as e:
+                print(f"  Could not fill Last Name: {e}")
         
         # Step 3: Fill Email
         print("\n=== Step 3: Filling Email ===")
         value = form_data.get('email', '')
-        if value:
-            filled = False
-            for selector in field_selectors['email']:
-                try:
-                    element = driver.find_element(By.XPATH, selector)
-                    if element.is_displayed():
-                        element.clear()
-                        element.send_keys(value)
-                        print(f"  Filled Email: {value}")
-                        filled = True
-                        break
-                except Exception:
-                    continue
-            if not filled:
-                print("  Could not find Email field.")
-            else:
-                print(f"  Waiting {FIELD_FILL_RATE_LIMIT} seconds...")
-                time.sleep(FIELD_FILL_RATE_LIMIT)
+        if value and value.lower() != 'none':
+            try:
+                element = driver.find_element(By.XPATH, field_mapping['email'])
+                if element.is_displayed():
+                    element.clear()
+                    element.send_keys(value)
+                    print(f"  Filled Email: {value}")
+                    time.sleep(FIELD_FILL_RATE_LIMIT)
+                else:
+                    print("  Email field not visible.")
+            except Exception as e:
+                print(f"  Could not fill Email: {e}")
+        else:
+            # Use site coordinator email as fallback
+            fallback_email = SITE_COORDINATOR_EMAIL
+            try:
+                element = driver.find_element(By.XPATH, field_mapping['email'])
+                if element.is_displayed():
+                    element.clear()
+                    element.send_keys(fallback_email)
+                    print(f"  Filled Email (fallback): {fallback_email}")
+                    time.sleep(FIELD_FILL_RATE_LIMIT)
+                else:
+                    print("  Email field not visible.")
+            except Exception as e:
+                print(f"  Could not fill Email: {e}")
         
         # Step 4: Fill Confirm Email
         print("\n=== Step 4: Filling Confirm Email ===")
-        value = form_data.get('email', '')  # Use same email for confirmation
-        if value:
-            filled = False
-            for selector in field_selectors['confirm_email']:
-                try:
-                    element = driver.find_element(By.XPATH, selector)
-                    if element.is_displayed():
-                        element.clear()
-                        element.send_keys(value)
-                        print(f"  Filled Confirm Email: {value}")
-                        filled = True
-                        break
-                except Exception:
-                    continue
-            if not filled:
-                print("  Could not find Confirm Email field.")
-            else:
-                print(f"  Waiting {FIELD_FILL_RATE_LIMIT} seconds...")
+        email_value = form_data.get('email', '')
+        if email_value and email_value.lower() != 'none':
+            confirm_value = email_value
+        else:
+            confirm_value = SITE_COORDINATOR_EMAIL  # Use fallback email
+        
+        try:
+            element = driver.find_element(By.XPATH, field_mapping['confirm_email'])
+            if element.is_displayed():
+                element.clear()
+                element.send_keys(confirm_value)
+                print(f"  Filled Confirm Email: {confirm_value}")
                 time.sleep(FIELD_FILL_RATE_LIMIT)
+            else:
+                print("  Confirm Email field not visible.")
+        except Exception as e:
+            print(f"  Could not fill Confirm Email: {e}")
         
         # Step 5: Uncheck "Keep me updated" checkbox
         print("\n=== Step 5: Unchecking 'Keep me updated' checkbox ===")
-        # Wait for checkbox to be present
         time.sleep(2)
         
-        update_checkbox_selectors = [
-            # Eventbrite specific checkbox selectors based on the HTML structure
-            "//div[@data-testid='eds-checkbox_wrapper']//input[@type='checkbox']",
-            "//div[contains(@class, 'eds-checkbox')]//input[@type='checkbox']",
-            "//input[@type='checkbox' and ancestor::div[contains(@class, 'eds-checkbox')]]",
-            "//input[@type='checkbox' and ancestor::div[@data-testid='eds-checkbox_wrapper']]",
-            # Try clicking the wrapper div itself
-            "//div[@data-testid='eds-checkbox_wrapper']",
-            "//div[contains(@class, 'eds-checkbox')]",
-            # Original selectors as fallback
-            "//input[@id='organizer-marketing-opt-in']",
-            "//input[@name='organizationMarketingOptIn']",
-            "//input[@type='checkbox' and contains(@class, 'eds-checkbox_input')]",
-            "//input[@type='checkbox' and contains(@name, 'update')]",
-            "//input[@type='checkbox' and contains(@id, 'update')]",
-            "//input[@type='checkbox' and contains(@aria-label, 'update')]",
-            "//input[@type='checkbox' and contains(@name, 'newsletter')]",
-            "//input[@type='checkbox' and contains(@id, 'newsletter')]",
-            "//input[@type='checkbox' and contains(@aria-label, 'newsletter')]",
-            "//input[@type='checkbox' and contains(@name, 'events')]",
-            "//input[@type='checkbox' and contains(@id, 'events')]",
-            "//input[@type='checkbox' and contains(@aria-label, 'events')]",
-            "//input[@type='checkbox' and contains(@name, 'news')]",
-            "//input[@type='checkbox' and contains(@id, 'news')]",
-            "//input[@type='checkbox' and contains(@aria-label, 'news')]",
-            "//input[@type='checkbox' and contains(@name, 'marketing')]",
-            "//input[@type='checkbox' and contains(@id, 'marketing')]",
-            "//input[@type='checkbox' and contains(@aria-label, 'marketing')]",
-            "//input[@type='checkbox' and contains(@name, 'notify')]",
-            "//input[@type='checkbox' and contains(@id, 'notify')]",
-            "//input[@type='checkbox' and contains(@aria-label, 'notify')]",
-            "//input[@type='checkbox' and contains(@name, 'email')]",
-            "//input[@type='checkbox' and contains(@id, 'email')]",
-            "//input[@type='checkbox' and contains(@aria-label, 'email')]",
-            "//input[@type='checkbox' and contains(@name, 'opt')]",
-            "//input[@type='checkbox' and contains(@id, 'opt')]",
-            "//input[@type='checkbox' and contains(@aria-label, 'opt')]",
-            "//input[@type='checkbox' and contains(@name, 'in')]",
-            "//input[@type='checkbox' and contains(@id, 'in')]",
-            "//input[@type='checkbox' and contains(@aria-label, 'in')]",
-            # More specific selectors for "Keep me updated"
-            "//input[@type='checkbox' and following-sibling::label[contains(text(), 'Keep me updated')]]",
-            "//input[@type='checkbox' and preceding-sibling::label[contains(text(), 'Keep me updated')]]",
-            "//input[@type='checkbox' and parent::div[.//label[contains(text(), 'Keep me updated')]]]",
-            "//input[@type='checkbox' and ancestor::div[.//label[contains(text(), 'Keep me updated')]]]",
-            "//input[@type='checkbox' and ancestor::div[.//span[contains(text(), 'Keep me updated')]]]",
-            "//input[@type='checkbox' and ancestor::div[.//div[contains(text(), 'Keep me updated')]]]",
-            # Look for checkboxes near "Keep me updated" text
-            "//label[contains(text(), 'Keep me updated')]/preceding-sibling::input[@type='checkbox']",
-            "//label[contains(text(), 'Keep me updated')]/following-sibling::input[@type='checkbox']",
-            "//span[contains(text(), 'Keep me updated')]/preceding-sibling::input[@type='checkbox']",
-            "//span[contains(text(), 'Keep me updated')]/following-sibling::input[@type='checkbox']",
-            "//div[contains(text(), 'Keep me updated')]/preceding-sibling::input[@type='checkbox']",
-            "//div[contains(text(), 'Keep me updated')]/following-sibling::input[@type='checkbox']",
-        ]
-        
-        unchecked = False
-        for selector in update_checkbox_selectors:
-            try:
-                elements = driver.find_elements(By.XPATH, selector)
-                print(f"  Found {len(elements)} elements with selector: {selector}")
-                for element in elements:
-                    if element.is_displayed():
-                        print(f"    Element displayed: {element.get_attribute('name')} | {element.get_attribute('id')} | {element.get_attribute('aria-label')}")
-                        
-                        # Check if this is a checkbox input or a wrapper div
-                        if element.tag_name == 'input':
-                            print(f"    Checkbox checked: {element.is_selected()}")
-                            # Click the checkbox to toggle it to unchecked state
-                            element.click()
-                            print("  Clicked 'Keep me updated' checkbox to uncheck it.")
-                            unchecked = True
-                            break
-                        elif element.tag_name == 'div':
-                            print(f"    Found checkbox wrapper div, attempting to click...")
-                            # Try clicking the wrapper div
-                            element.click()
-                            print("  Clicked 'Keep me updated' checkbox wrapper to uncheck it.")
-                            unchecked = True
-                            break
-                if unchecked:
-                    break
-            except Exception as e:
-                print(f"    Error with selector {selector}: {e}")
-                continue
-        
-        if not unchecked:
-            print("  Could not find or uncheck 'Keep me updated' checkbox.")
-        
-        print(f"  Waiting {FIELD_FILL_RATE_LIMIT} seconds...")
-        time.sleep(FIELD_FILL_RATE_LIMIT)
+        try:
+            checkbox = driver.find_element(By.XPATH, "//div[contains(@class, 'eds-checkbox')]//input[@type='checkbox']")
+            if checkbox.is_displayed() and checkbox.is_selected():
+                # Click the wrapper div to uncheck
+                wrapper = driver.find_element(By.XPATH, "//div[contains(@class, 'eds-checkbox')]")
+                wrapper.click()
+                print("  Clicked 'Keep me updated' checkbox wrapper to uncheck it.")
+                time.sleep(FIELD_FILL_RATE_LIMIT)
+            else:
+                print("  'Keep me updated' checkbox not found or already unchecked.")
+        except Exception as e:
+            print(f"  Could not handle 'Keep me updated' checkbox: {e}")
         
         # Step 6: Fill Address
         print("\n=== Step 6: Filling Address ===")
         value = form_data.get('address', '')
-        if value:
-            filled = False
-            for selector in field_selectors['address']:
-                try:
-                    element = driver.find_element(By.XPATH, selector)
-                    if element.is_displayed():
-                        element.clear()
-                        element.send_keys(value)
-                        print(f"  Filled Address: {value}")
-                        filled = True
-                        break
-                except Exception:
-                    continue
-            if not filled:
-                print("  Could not find Address field.")
-            else:
-                print(f"  Waiting {FIELD_FILL_RATE_LIMIT} seconds...")
-                time.sleep(FIELD_FILL_RATE_LIMIT)
+        if value and value.lower() != 'none':
+            try:
+                element = driver.find_element(By.XPATH, field_mapping['address'])
+                if element.is_displayed():
+                    element.clear()
+                    element.send_keys(value)
+                    print(f"  Filled Address: {value}")
+                    time.sleep(FIELD_FILL_RATE_LIMIT)
+                else:
+                    print("  Address field not visible.")
+            except Exception as e:
+                print(f"  Could not fill Address: {e}")
+        else:
+            # Use fallback address
+            fallback_address = "47111 Mission Falls Ct"
+            try:
+                element = driver.find_element(By.XPATH, field_mapping['address'])
+                if element.is_displayed():
+                    element.clear()
+                    element.send_keys(fallback_address)
+                    print(f"  Filled Address (fallback): {fallback_address}")
+                    time.sleep(FIELD_FILL_RATE_LIMIT)
+                else:
+                    print("  Address field not visible.")
+            except Exception as e:
+                print(f"  Could not fill Address: {e}")
         
         # Step 7: Fill City
         print("\n=== Step 7: Filling City ===")
-        value = form_data.get('city', '')
-        if value:
-            filled = False
-            for selector in field_selectors['city']:
-                try:
-                    element = driver.find_element(By.XPATH, selector)
-                    if element.is_displayed():
-                        element.clear()
-                        element.send_keys(value)
-                        print(f"  Filled City: {value}")
-                        filled = True
-                        break
-                except Exception:
-                    continue
-            if not filled:
-                print("  Could not find City field.")
-            else:
-                print(f"  Waiting {FIELD_FILL_RATE_LIMIT} seconds...")
-                time.sleep(FIELD_FILL_RATE_LIMIT)
+        address_value = form_data.get('address', '')
+        if address_value and address_value.lower() != 'none':
+            value = form_data.get('city', '')
+        else:
+            # Use fallback city when address is None
+            value = 'Fremont'
         
-        # Step 8: Fill State (Dropdown) - Select California
+        if value and value.lower() != 'none':
+            try:
+                element = driver.find_element(By.XPATH, field_mapping['city'])
+                if element.is_displayed():
+                    element.clear()
+                    element.send_keys(value)
+                    print(f"  Filled City: {value}")
+                    time.sleep(FIELD_FILL_RATE_LIMIT)
+                else:
+                    print("  City field not visible.")
+            except Exception as e:
+                print(f"  Could not fill City: {e}")
+        
+        # Step 8: Fill State (Dropdown)
         print("\n=== Step 8: Filling State (Dropdown) ===")
-        state_value = form_data.get('state', '')
+        address_value = form_data.get('address', '')
+        if address_value and address_value.lower() != 'none':
+            state_value = form_data.get('state', '')
+        else:
+            # Use fallback state when address is None
+            state_value = 'CA'
+        
         if state_value == 'CA':
             state_value = 'California'  # Convert CA to California for dropdown
         
-        state_selectors = [
-            "//select[@id='N-homeregion']",
-            "//select[@name='buyer.N-home.region']",
-            "//select[@id='N-homestate']",
-            "//select[@name='buyer.N-home.state']",
-            "//select[contains(@class, 'eds-field-styled__select')]",
-            "//select[@name='state']",
-            "//select[contains(@id, 'state')]",
-            "//select[contains(@aria-label, 'State')]",
-            "//select[contains(@class, 'state')]",
-            "//select[contains(@name, 'region')]",
-            "//select[contains(@id, 'region')]",
-            "//select[contains(@aria-label, 'region')]",
-            "//select[contains(@name, 'home')]",
-            "//select[contains(@id, 'home')]",
-            "//select[contains(@aria-label, 'home')]",
-            "//select[contains(@name, 'N-home')]",
-            "//select[contains(@id, 'N-home')]",
-            "//select[contains(@aria-label, 'N-home')]",
-            # Try to find any select element that might be a state dropdown
-            "//select[contains(@name, 'state') or contains(@id, 'state') or contains(@aria-label, 'state')]",
-        ]
+        try:
+            element = driver.find_element(By.XPATH, field_mapping['state'])
+            if element.is_displayed():
+                select_element = Select(element)
+                select_element.select_by_visible_text('California')
+                print(f"  Selected State: California")
+                time.sleep(FIELD_FILL_RATE_LIMIT)
+            else:
+                print("  State dropdown not visible.")
+        except Exception as e:
+            print(f"  Could not fill State: {e}")
         
-        # Wait for dropdowns to be present
-        time.sleep(2)
-        
-        state_filled = False
-        for selector in state_selectors:
-            try:
-                elements = driver.find_elements(By.XPATH, selector)
-                print(f"    Found {len(elements)} elements with selector: {selector}")
-                for element in elements:
-                    # Removed the .is_displayed() check to always try interacting
-                    print(f"      State dropdown found: {element.get_attribute('name')} | {element.get_attribute('id')} | {element.get_attribute('aria-label')}")
-                    print(f"      Element aria-invalid: {element.get_attribute('aria-invalid')}")
-                    
-                    # If element is in error state, try to clear it first
-                    if element.get_attribute('aria-invalid') == 'true':
-                        print(f"      Element is in error state, attempting to clear...")
-                        try:
-                            select_element = Select(element)
-                            select_element.select_by_index(0)  # Select first option
-                            time.sleep(1)
-                        except Exception as clear_error:
-                            print(f"      Could not clear error state: {clear_error}")
-                    
-                    try:
-                        print(f"      Attempting to create Select wrapper for element...")
-                        select_element = Select(element)
-                        print(f"      Select wrapper created successfully")
-                        options = [option.text for option in select_element.options]
-                        print(f"      Available dropdown options: {options}")
-                        
-                        # Try to select 'California' exactly
-                        try:
-                            select_element.select_by_visible_text('California')
-                            print(f"  Selected State: California")
-                            state_filled = True
-                            time.sleep(1)  # Wait for selection to register
-                            break
-                        except Exception as e1:
-                            print(f"      Could not select 'California': {e1}")
-                            # Try partial match for 'calif'
-                            found_partial = False
-                            for option in select_element.options:
-                                if 'calif' in option.text.lower():
-                                    select_element.select_by_visible_text(option.text)
-                                    print(f"  Selected State (partial match): {option.text}")
-                                    state_filled = True
-                                    found_partial = True
-                                    time.sleep(1)  # Wait for selection to register
-                                    break
-                            if not found_partial:
-                                print(f"      Could not find any option containing 'calif'. Printing all options for debugging:")
-                                for option in select_element.options:
-                                    print(f"        Option: '{option.text}'")
-                    except Exception as e:
-                        print(f"      Could not work with state dropdown: {e}")
-                        print(f"      Element tag: {element.tag_name}")
-                        print(f"      Element HTML: {element.get_attribute('outerHTML')[:200]}...")
-                if state_filled:
-                    break
-            except Exception as e:
-                print(f"    Error with selector {selector}: {e}")
-                continue
-        
-        if not state_filled:
-            print("  Could not find State dropdown.")
-        else:
-            print(f"  Waiting {FIELD_FILL_RATE_LIMIT} seconds...")
-            time.sleep(FIELD_FILL_RATE_LIMIT)
-
         # Step 9: Fill Zip Code
         print("\n=== Step 9: Filling Zip Code ===")
-        value = form_data.get('zip_code', '')
-        print(f"  ZIP Code value from form_data: '{value}'")
-        if value:
-            filled = False
-            for selector in field_selectors['zip_code']:
-                try:
-                    elements = driver.find_elements(By.XPATH, selector)
-                    print(f"    Found {len(elements)} elements with selector: {selector}")
-                    for element in elements:
-                        if element.is_displayed():
-                            print(f"      Element displayed: {element.get_attribute('name')} | {element.get_attribute('id')} | {element.get_attribute('aria-label')}")
-                            element.clear()
-                            element.send_keys(value)
-                            print(f"  Filled Zip Code: {value}")
-                            filled = True
-                            break
-                    if filled:
-                        break
-                except Exception as e:
-                    print(f"    Error with selector {selector}: {e}")
-                    continue
-            if not filled:
-                print("  Could not find Zip Code field.")
-            else:
-                print(f"  Waiting {FIELD_FILL_RATE_LIMIT} seconds...")
-                time.sleep(FIELD_FILL_RATE_LIMIT)
+        address_value = form_data.get('address', '')
+        if address_value and address_value.lower() != 'none':
+            value = form_data.get('zip_code', '')
         else:
-            print("  No ZIP code value found in form_data.")
-
+            # Use fallback zip when address is None
+            value = '94539'
+        
+        if value and value.lower() != 'none':
+            try:
+                element = driver.find_element(By.XPATH, field_mapping['zip_code'])
+                if element.is_displayed():
+                    element.clear()
+                    element.send_keys(value)
+                    print(f"  Filled Zip Code: {value}")
+                    time.sleep(FIELD_FILL_RATE_LIMIT)
+                else:
+                    print("  Zip Code field not visible.")
+            except Exception as e:
+                print(f"  Could not fill Zip Code: {e}")
+        
         # Step 10: Fill Country - Select United States
         print("\n=== Step 10: Filling Country ===")
         country_value = COUNTRY  # Use the configuration variable
@@ -1549,38 +1339,25 @@ def fill_registration_form(driver, form_data):
         # Step 15: Check all liability checkboxes with the label 'I agree to the above additional terms.'
         print("\n=== Step 15: Checking all liability checkboxes ===")
         
-        # Check if user agreed to liability terms based on OCR text
-        # Look for "Yes, I agree X" pattern in the extracted text
-        liability_agreed = False
-        if extracted_text:
-            # Look for patterns indicating agreement with X marked
-            if "yes, i agree x" in extracted_text.lower() or "yes i agree x" in extracted_text.lower():
-                liability_agreed = True
-                print("  OCR detected: User agreed to liability terms (X marked)")
-            else:
-                print("  OCR detected: User did not agree to liability terms (no X marked)")
-        else:
-            print("  No OCR text available; defaulting to not checking liability boxes")
+        # Always check liability checkboxes regardless of form data
+        print("  Always checking liability checkboxes (default behavior)")
         
-        if liability_agreed:
-            try:
-                checkbox_labels = driver.find_elements(
-                    By.XPATH,
-                    "//label[contains(., 'I agree to the above additional terms.')]"
-                )
-                print(f"  Found {len(checkbox_labels)} liability checkboxes")
-                for idx, label in enumerate(checkbox_labels):
-                    try:
-                        driver.execute_script("arguments[0].scrollIntoView(true);", label)
-                        label.click()
-                        print(f"  Checked liability checkbox {idx+1}")
-                        time.sleep(FIELD_FILL_RATE_LIMIT)
-                    except Exception as e:
-                        print(f"  Could not check liability checkbox {idx+1}: {e}")
-            except Exception as e:
-                print(f"  Error finding liability checkboxes: {e}")
-        else:
-            print("  User did not agree to liability terms; checkboxes left unchecked.")
+        try:
+            checkbox_labels = driver.find_elements(
+                By.XPATH,
+                "//label[contains(., 'I agree to the above additional terms.')]"
+            )
+            print(f"  Found {len(checkbox_labels)} liability checkboxes")
+            for idx, label in enumerate(checkbox_labels):
+                try:
+                    driver.execute_script("arguments[0].scrollIntoView(true);", label)
+                    label.click()
+                    print(f"  Checked liability checkbox {idx+1}")
+                    time.sleep(FIELD_FILL_RATE_LIMIT)
+                except Exception as e:
+                    print(f"  Could not check liability checkbox {idx+1}: {e}")
+        except Exception as e:
+            print(f"  Error finding liability checkboxes: {e}")
         
     except Exception as e:
         print(f"Error filling form: {e}")
